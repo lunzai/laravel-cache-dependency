@@ -65,7 +65,8 @@ class CacheEntryWrapper
                 }
             } catch (\Throwable $e) {
                 // Handle based on fail_open config
-                $failOpen = config('cache-dependency.fail_open', false);
+                // Global setting overrides dependency-specific settings
+                $failOpen = $this->shouldFailOpen($dependency);
 
                 if (! $failOpen) {
                     // Fail closed: treat as stale (cache miss)
@@ -107,5 +108,32 @@ class CacheEntryWrapper
     {
         $this->data = $data['data'];
         $this->dependencies = $data['dependencies'] ?? [];
+    }
+
+    /**
+     * Determine if failures should fail open for a given dependency.
+     *
+     * Checks global fail_open setting first, then dependency-specific settings.
+     *
+     * @param  DependencyInterface  $dependency  The dependency that failed
+     * @return bool True to fail open (return cached value), false to fail closed (cache miss)
+     */
+    protected function shouldFailOpen(DependencyInterface $dependency): bool
+    {
+        // Check global fail_open setting first
+        $globalFailOpen = config('cache-dependency.fail_open');
+
+        if ($globalFailOpen !== null) {
+            return (bool) $globalFailOpen;
+        }
+
+        // Fall back to dependency-specific settings
+        // Currently only DB dependencies have specific fail_open config
+        if ($dependency instanceof \Lunzai\CacheDependency\Dependencies\DbDependency) {
+            return (bool) config('cache-dependency.db.fail_open', false);
+        }
+
+        // Default: fail closed (safer)
+        return false;
     }
 }

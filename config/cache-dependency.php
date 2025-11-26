@@ -45,7 +45,7 @@ return [
         // Behavior when DB query fails:
         // - false: Return null (cache miss) - fail closed
         // - true: Return cached value (fail open)
-        'fail_open' => env('CACHE_DEPENDENCY_FAIL_OPEN', false),
+        'fail_open' => env('CACHE_DEPENDENCY_DB_FAIL_OPEN', false),
     ],
 
     /*
@@ -60,6 +60,7 @@ return [
     // Allow baseline capture to fail gracefully (skip dependency instead of throwing)
     'allow_baseline_failure' => env('CACHE_DEPENDENCY_ALLOW_BASELINE_FAILURE', false),
 
-    // Global fail_open setting (overrides db.fail_open if set)
-    'fail_open' => env('CACHE_DEPENDENCY_FAIL_OPEN', false),
+    // Global fail_open setting for ALL dependencies (overrides specific settings)
+    // If null, uses dependency-specific settings (e.g., db.fail_open)
+    'fail_open' => env('CACHE_DEPENDENCY_FAIL_OPEN'),
 ];
