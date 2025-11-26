@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace Lunzai\CacheDependency;
 
-use Lunzai\CacheDependency\Dependencies\DbDependency;
-use Lunzai\CacheDependency\Dependencies\TagDependency;
+use Lunzai\CacheDependency\Contracts\DependencyInterface;
 
 /**
  * Wraps cached data with dependency metadata.
  *
  * This class encapsulates the actual cached value along with its dependencies
- * (tags and database queries) to enable automatic staleness detection.
+ * to enable automatic staleness detection. Dependencies are stored polymorphically,
+ * allowing extensibility without modifying this class.
  */
 class CacheEntryWrapper
 {
@@ -19,30 +19,12 @@ class CacheEntryWrapper
      * Create a new cache entry wrapper.
      *
      * @param  mixed  $data  The actual cached data
-     * @param  array<string>  $tags  Tags associated with this cache entry
-     * @param  array<string, int>  $tagVersions  Tag versions at time of caching
-     * @param  DbDependency|null  $dbDependency  Database dependency if any
-     * @param  mixed  $dbBaseline  Baseline database value at time of caching
+     * @param  array<array{dependency: DependencyInterface, baseline: mixed}>  $dependencies  Dependencies with baselines
      */
     public function __construct(
         protected mixed $data,
-        protected array $tags,
-        protected array $tagVersions,
-        protected ?DbDependency $dbDependency,
-        protected mixed $dbBaseline
+        protected array $dependencies = []
     ) {}
-
-    /**
-     * Get the tag dependency instance.
-     */
-    protected function getTagDependency(): ?TagDependency
-    {
-        if (empty($this->tags)) {
-            return null;
-        }
-
-        return new TagDependency($this->tags, $this->tagVersions);
-    }
 
     /**
      * Get the wrapped data.
@@ -53,52 +35,50 @@ class CacheEntryWrapper
     }
 
     /**
-     * Get the tags associated with this cache entry.
+     * Get all dependencies with their baselines.
      *
-     * @return array<string>
+     * @return array<array{dependency: DependencyInterface, baseline: mixed}>
      */
-    public function getTags(): array
+    public function getDependencies(): array
     {
-        return $this->tags;
+        return $this->dependencies;
     }
 
     /**
      * Check if this cache entry is stale.
      *
-     * An entry is stale if:
-     * - Any tag version has increased since caching
-     * - The database dependency query result has changed
+     * An entry is stale if ANY dependency reports being stale.
+     * Iterates through all dependencies polymorphically.
      *
      * @param  CacheDependencyManager  $manager  The cache dependency manager
      * @return bool True if stale, false otherwise
      */
     public function isStale(CacheDependencyManager $manager): bool
     {
-        // Check tag dependency
-        $tagDependency = $this->getTagDependency();
-        if ($tagDependency !== null && $tagDependency->isStale($manager)) {
-            return true;
-        }
+        foreach ($this->dependencies as $item) {
+            $dependency = $item['dependency'];
+            $baseline = $item['baseline'];
 
-        // Check database dependency
-        if ($this->dbDependency !== null) {
             try {
-                $currentValue = $this->dbDependency->getCurrentValue();
-
-                if ($currentValue !== $this->dbBaseline) {
+                if ($dependency->isStale($manager, $baseline)) {
                     return true;
                 }
             } catch (\Throwable $e) {
                 // Handle based on fail_open config
-                $failOpen = config('cache-dependency.db.fail_open', false);
+                $failOpen = config('cache-dependency.fail_open', false);
 
                 if (! $failOpen) {
                     // Fail closed: treat as stale (cache miss)
                     return true;
                 }
 
-                // Fail open: treat as not stale (return cached value)
-                return false;
+                // Fail open: log and continue checking other dependencies
+                if (config('cache-dependency.log_failures', true)) {
+                    logger()->warning('Dependency staleness check failed', [
+                        'dependency' => get_class($dependency),
+                        'error' => $e->getMessage(),
+                    ]);
+                }
             }
         }
 
@@ -114,10 +94,7 @@ class CacheEntryWrapper
     {
         return [
             'data' => $this->data,
-            'tags' => $this->tags,
-            'tagVersions' => $this->tagVersions,
-            'dbDependency' => $this->dbDependency,
-            'dbBaseline' => $this->dbBaseline,
+            'dependencies' => $this->dependencies,
         ];
     }
 
@@ -129,9 +106,6 @@ class CacheEntryWrapper
     public function __unserialize(array $data): void
     {
         $this->data = $data['data'];
-        $this->tags = $data['tags'];
-        $this->tagVersions = $data['tagVersions'];
-        $this->dbDependency = $data['dbDependency'];
-        $this->dbBaseline = $data['dbBaseline'];
+        $this->dependencies = $data['dependencies'] ?? [];
     }
 }

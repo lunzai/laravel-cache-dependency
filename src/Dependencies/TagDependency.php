@@ -19,12 +19,37 @@ class TagDependency implements DependencyInterface
      * Create a new tag dependency.
      *
      * @param  array<string>  $tags  Tags to track
-     * @param  array<string, int>  $tagVersions  Tag versions at time of caching
      */
     public function __construct(
-        protected array $tags,
-        protected array $tagVersions
+        protected array $tags
     ) {}
+
+    /**
+     * Add more tags to this dependency.
+     *
+     * @param  array<string>  $tags  Tags to add
+     */
+    public function addTags(array $tags): void
+    {
+        $this->tags = array_unique(array_merge($this->tags, $tags));
+    }
+
+    /**
+     * Capture current tag versions as baseline.
+     *
+     * @param  CacheDependencyManager  $manager  The cache dependency manager
+     * @return array<string, int> Tag versions at time of capture
+     */
+    public function captureBaseline(CacheDependencyManager $manager): mixed
+    {
+        $tagVersions = [];
+
+        foreach ($this->tags as $tag) {
+            $tagVersions[$tag] = $manager->getTagVersion($tag);
+        }
+
+        return $tagVersions;
+    }
 
     /**
      * Check if this dependency is stale.
@@ -33,12 +58,17 @@ class TagDependency implements DependencyInterface
      * If any tag version has increased, the cache is stale.
      *
      * @param  CacheDependencyManager  $manager  The cache dependency manager
+     * @param  mixed  $baseline  Tag versions captured at cache time
      */
-    public function isStale(CacheDependencyManager $manager): bool
+    public function isStale(CacheDependencyManager $manager, mixed $baseline = null): bool
     {
+        if (! is_array($baseline)) {
+            return false; // No baseline = not stale
+        }
+
         foreach ($this->tags as $tag) {
             $currentVersion = $manager->getTagVersion($tag);
-            $storedVersion = $this->tagVersions[$tag] ?? 0;
+            $storedVersion = $baseline[$tag] ?? 0;
 
             if ($currentVersion > $storedVersion) {
                 return true;
@@ -59,16 +89,6 @@ class TagDependency implements DependencyInterface
     }
 
     /**
-     * Get the tag versions.
-     *
-     * @return array<string, int>
-     */
-    public function getTagVersions(): array
-    {
-        return $this->tagVersions;
-    }
-
-    /**
      * Convert the dependency to an array.
      *
      * @return array<string, mixed>
@@ -78,7 +98,6 @@ class TagDependency implements DependencyInterface
         return [
             'type' => 'tag',
             'tags' => $this->tags,
-            'versions' => $this->tagVersions,
         ];
     }
 
@@ -91,7 +110,6 @@ class TagDependency implements DependencyInterface
     {
         return [
             'tags' => $this->tags,
-            'tagVersions' => $this->tagVersions,
         ];
     }
 
@@ -103,6 +121,5 @@ class TagDependency implements DependencyInterface
     public function __unserialize(array $data): void
     {
         $this->tags = $data['tags'];
-        $this->tagVersions = $data['tagVersions'];
     }
 }

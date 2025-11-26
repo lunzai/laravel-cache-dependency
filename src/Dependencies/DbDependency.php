@@ -31,11 +31,42 @@ class DbDependency implements DependencyInterface
     ) {}
 
     /**
-     * Get the current value from the database query.
+     * Capture the current database value as baseline.
+     *
+     * @param  CacheDependencyManager  $manager  The cache dependency manager
+     * @return mixed The current database value
      *
      * @throws DatabaseDependencyException
      */
-    public function getCurrentValue(): mixed
+    public function captureBaseline(CacheDependencyManager $manager): mixed
+    {
+        return $this->fetchCurrentValue();
+    }
+
+    /**
+     * Check if database value has changed from baseline.
+     *
+     * @param  CacheDependencyManager  $manager  The cache dependency manager
+     * @param  mixed  $baseline  The baseline value captured at cache time
+     * @return bool True if the current value differs from baseline
+     *
+     * @throws DatabaseDependencyException
+     */
+    public function isStale(CacheDependencyManager $manager, mixed $baseline = null): bool
+    {
+        $currentValue = $this->fetchCurrentValue();
+
+        return $currentValue !== $baseline;
+    }
+
+    /**
+     * Fetch the current value from the database.
+     *
+     * @return mixed The first column of the first row
+     *
+     * @throws DatabaseDependencyException
+     */
+    protected function fetchCurrentValue(): mixed
     {
         try {
             $connection = $this->connection ?? config('cache-dependency.db.connection');
@@ -62,18 +93,15 @@ class DbDependency implements DependencyInterface
     }
 
     /**
-     * Check if this dependency is stale (required by DependencyInterface).
+     * Get the current value from the database query.
      *
-     * Note: This method is not used directly for DB dependencies.
-     * The CacheEntryWrapper calls getCurrentValue() instead.
+     * @deprecated Use captureBaseline() instead
      *
-     * @param  CacheDependencyManager  $manager  The cache dependency manager
+     * @throws DatabaseDependencyException
      */
-    public function isStale(CacheDependencyManager $manager): bool
+    public function getCurrentValue(): mixed
     {
-        // This method exists to satisfy the interface but is not used
-        // CacheEntryWrapper handles DB dependency checking directly
-        return false;
+        return $this->fetchCurrentValue();
     }
 
     /**

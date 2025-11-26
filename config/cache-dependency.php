@@ -47,4 +47,19 @@ return [
         // - true: Return cached value (fail open)
         'fail_open' => env('CACHE_DEPENDENCY_FAIL_OPEN', false),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Error Handling
+    |--------------------------------------------------------------------------
+    */
+
+    // Log dependency failures (staleness checks and baseline captures)
+    'log_failures' => env('CACHE_DEPENDENCY_LOG_FAILURES', true),
+
+    // Allow baseline capture to fail gracefully (skip dependency instead of throwing)
+    'allow_baseline_failure' => env('CACHE_DEPENDENCY_ALLOW_BASELINE_FAILURE', false),
+
+    // Global fail_open setting (overrides db.fail_open if set)
+    'fail_open' => env('CACHE_DEPENDENCY_FAIL_OPEN', false),
 ];

@@ -9,6 +9,7 @@ use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Support\Facades\Cache;
 use Lunzai\CacheDependency\Contracts\CacheDependencyInterface;
 use Lunzai\CacheDependency\Dependencies\DbDependency;
+use Lunzai\CacheDependency\Dependencies\TagDependency;
 
 /**
  * Main cache dependency manager.
@@ -46,7 +47,9 @@ class CacheDependencyManager implements CacheDependencyInterface
      */
     public function tags(array|string $tags): PendingDependency
     {
-        return new PendingDependency($this, (array) $tags, null);
+        $tagDependency = new TagDependency((array) $tags);
+
+        return new PendingDependency($this, [$tagDependency]);
     }
 
     /**
@@ -59,7 +62,7 @@ class CacheDependencyManager implements CacheDependencyInterface
     {
         $dbDependency = new DbDependency($sql, $params);
 
-        return new PendingDependency($this, [], $dbDependency);
+        return new PendingDependency($this, [$dbDependency]);
     }
 
     /**

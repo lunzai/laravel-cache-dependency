@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Lunzai\CacheDependency;
 
 use Closure;
+use Lunzai\CacheDependency\Contracts\DependencyInterface;
 use Lunzai\CacheDependency\Dependencies\DbDependency;
+use Lunzai\CacheDependency\Dependencies\TagDependency;
 
 /**
  * Fluent interface for building dependency-tracked cache operations.
@@ -19,15 +21,11 @@ class PendingDependency
      * Create a new pending dependency.
      *
      * @param  CacheDependencyManager  $manager  The cache dependency manager
-     * @param  array<string>  $tags  Tags to associate with cache entries
-     * @param  DbDependency|null  $dbDependency  Database dependency if any
-     * @param  string|null  $connection  Database connection name
+     * @param  array<DependencyInterface>  $dependencies  Array of dependency instances
      */
     public function __construct(
         protected CacheDependencyManager $manager,
-        protected array $tags = [],
-        protected ?DbDependency $dbDependency = null,
-        protected ?string $connection = null
+        protected array $dependencies = []
     ) {}
 
     /**
@@ -38,7 +36,16 @@ class PendingDependency
      */
     public function tags(array|string $tags): self
     {
-        $this->tags = array_merge($this->tags, (array) $tags);
+        // Check if we already have a TagDependency
+        $tagDependency = $this->findDependency(TagDependency::class);
+
+        if ($tagDependency) {
+            // Merge with existing tags
+            $tagDependency->addTags((array) $tags);
+        } else {
+            // Create new TagDependency
+            $this->dependencies[] = new TagDependency((array) $tags);
+        }
 
         return $this;
     }
@@ -48,11 +55,12 @@ class PendingDependency
      *
      * @param  string  $sql  SQL query for dependency checking
      * @param  array<mixed>  $params  Query parameters
+     * @param  string|null  $connection  Database connection name
      * @return $this
      */
-    public function db(string $sql, array $params = []): self
+    public function db(string $sql, array $params = [], ?string $connection = null): self
     {
-        $this->dbDependency = new DbDependency($sql, $params, $this->connection);
+        $this->dependencies[] = new DbDependency($sql, $params, $connection);
 
         return $this;
     }
@@ -60,16 +68,19 @@ class PendingDependency
     /**
      * Set the database connection for the dependency.
      *
+     * @deprecated Use db($sql, $params, $connection) instead
+     *
      * @param  string  $connection  Connection name
      * @return $this
      */
     public function connection(string $connection): self
     {
-        $this->connection = $connection;
-
-        // If dbDependency already exists, update it
-        if ($this->dbDependency) {
-            $this->dbDependency->setConnection($connection);
+        // Find the last DbDependency and update its connection
+        for ($i = count($this->dependencies) - 1; $i >= 0; $i--) {
+            if ($this->dependencies[$i] instanceof DbDependency) {
+                $this->dependencies[$i]->setConnection($connection);
+                break;
+            }
         }
 
         return $this;
@@ -141,30 +152,56 @@ class PendingDependency
     }
 
     /**
-     * Create a cache entry wrapper with current dependency metadata.
+     * Create a cache entry wrapper with current dependency baselines.
      *
      * @param  mixed  $value  Value to wrap
      */
     protected function createWrapper(mixed $value): CacheEntryWrapper
     {
-        // Capture current tag versions
-        $tagVersions = [];
-        foreach ($this->tags as $tag) {
-            $tagVersions[$tag] = $this->manager->getTagVersion($tag);
+        $dependenciesWithBaselines = [];
+
+        foreach ($this->dependencies as $dependency) {
+            try {
+                $baseline = $dependency->captureBaseline($this->manager);
+
+                $dependenciesWithBaselines[] = [
+                    'dependency' => $dependency,
+                    'baseline' => $baseline,
+                ];
+            } catch (\Throwable $e) {
+                // Handle baseline capture failure
+                $allowFailure = config('cache-dependency.allow_baseline_failure', false);
+
+                if (! $allowFailure) {
+                    throw $e;
+                }
+
+                // Log and skip this dependency
+                if (config('cache-dependency.log_failures', true)) {
+                    logger()->warning('Failed to capture dependency baseline', [
+                        'dependency' => get_class($dependency),
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
         }
 
-        // Capture database baseline if dependency exists
-        $dbBaseline = null;
-        if ($this->dbDependency) {
-            $dbBaseline = $this->dbDependency->getCurrentValue();
+        return new CacheEntryWrapper($value, $dependenciesWithBaselines);
+    }
+
+    /**
+     * Find a dependency by class name.
+     *
+     * @param  string  $className  The class name to find
+     */
+    protected function findDependency(string $className): ?DependencyInterface
+    {
+        foreach ($this->dependencies as $dependency) {
+            if ($dependency instanceof $className) {
+                return $dependency;
+            }
         }
 
-        return new CacheEntryWrapper(
-            $value,
-            $this->tags,
-            $tagVersions,
-            $this->dbDependency,
-            $dbBaseline
-        );
+        return null;
     }
 }
