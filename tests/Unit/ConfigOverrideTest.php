@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Lunzai\CacheDependency\Tests\Unit;
 
 use Lunzai\CacheDependency\CacheEntryWrapper;
-use Lunzai\CacheDependency\CacheDependencyManager;
 use Lunzai\CacheDependency\Dependencies\DbDependency;
 use Lunzai\CacheDependency\Dependencies\TagDependency;
 use Lunzai\CacheDependency\Tests\TestCase;
