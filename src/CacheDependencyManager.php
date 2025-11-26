@@ -137,8 +137,9 @@ class CacheDependencyManager implements CacheDependencyInterface
             $newVersion = $this->store->increment($versionKey);
 
             if ($newVersion === false) {
-                // Increment failed, set to 1 with TTL
-                $this->store->put($versionKey, 1, $this->getTagVersionTtl());
+                // Increment failed, get current value and increment manually
+                $currentVersion = (int) $this->store->get($versionKey, 0);
+                $this->store->put($versionKey, $currentVersion + 1, $this->getTagVersionTtl());
             }
         }
     }

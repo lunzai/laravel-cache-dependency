@@ -21,11 +21,13 @@ class PendingDependency
      * @param  CacheDependencyManager  $manager  The cache dependency manager
      * @param  array<string>  $tags  Tags to associate with cache entries
      * @param  DbDependency|null  $dbDependency  Database dependency if any
+     * @param  string|null  $connection  Database connection name
      */
     public function __construct(
         protected CacheDependencyManager $manager,
         protected array $tags = [],
-        protected ?DbDependency $dbDependency = null
+        protected ?DbDependency $dbDependency = null,
+        protected ?string $connection = null
     ) {}
 
     /**
@@ -50,8 +52,7 @@ class PendingDependency
      */
     public function db(string $sql, array $params = []): self
     {
-        $connection = $this->dbDependency?->toArray()['connection'] ?? null;
-        $this->dbDependency = new DbDependency($sql, $params, $connection);
+        $this->dbDependency = new DbDependency($sql, $params, $this->connection);
 
         return $this;
     }
@@ -64,6 +65,9 @@ class PendingDependency
      */
     public function connection(string $connection): self
     {
+        $this->connection = $connection;
+
+        // If dbDependency already exists, update it
         if ($this->dbDependency) {
             $this->dbDependency->setConnection($connection);
         }

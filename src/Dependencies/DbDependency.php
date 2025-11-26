@@ -33,16 +33,14 @@ class DbDependency implements DependencyInterface
     /**
      * Get the current value from the database query.
      *
-     *
      * @throws DatabaseDependencyException
      */
     public function getCurrentValue(): mixed
     {
         try {
-            $timeout = config('cache-dependency.db.timeout', 5);
             $connection = $this->connection ?? config('cache-dependency.db.connection');
 
-            // Execute query with timeout
+            // Execute query
             $result = DB::connection($connection)
                 ->select($this->sql, $this->params);
 
@@ -54,7 +52,7 @@ class DbDependency implements DependencyInterface
             $firstRow = (array) $result[0];
 
             return reset($firstRow);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             throw new DatabaseDependencyException(
                 "Database dependency query failed: {$e->getMessage()}",
                 0,

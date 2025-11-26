@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Lunzai\CacheDependency;
 
 use Lunzai\CacheDependency\Dependencies\DbDependency;
+use Lunzai\CacheDependency\Dependencies\TagDependency;
 
 /**
  * Wraps cached data with dependency metadata.
@@ -30,6 +31,18 @@ class CacheEntryWrapper
         protected ?DbDependency $dbDependency,
         protected mixed $dbBaseline
     ) {}
+
+    /**
+     * Get the tag dependency instance.
+     */
+    protected function getTagDependency(): ?TagDependency
+    {
+        if (empty($this->tags)) {
+            return null;
+        }
+
+        return new TagDependency($this->tags, $this->tagVersions);
+    }
 
     /**
      * Get the wrapped data.
@@ -61,14 +74,10 @@ class CacheEntryWrapper
      */
     public function isStale(CacheDependencyManager $manager): bool
     {
-        // Check tag versions
-        foreach ($this->tags as $tag) {
-            $currentVersion = $manager->getTagVersion($tag);
-            $storedVersion = $this->tagVersions[$tag] ?? 0;
-
-            if ($currentVersion > $storedVersion) {
-                return true;
-            }
+        // Check tag dependency
+        $tagDependency = $this->getTagDependency();
+        if ($tagDependency !== null && $tagDependency->isStale($manager)) {
+            return true;
         }
 
         // Check database dependency
@@ -79,7 +88,7 @@ class CacheEntryWrapper
                 if ($currentValue !== $this->dbBaseline) {
                     return true;
                 }
-            } catch (\Exception $e) {
+            } catch (\Throwable $e) {
                 // Handle based on fail_open config
                 $failOpen = config('cache-dependency.db.fail_open', false);
 

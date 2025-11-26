@@ -42,9 +42,6 @@ return [
         // Default database connection for DB dependencies (null = default)
         'connection' => env('CACHE_DEPENDENCY_DB_CONNECTION'),
 
-        // Query timeout in seconds
-        'timeout' => env('CACHE_DEPENDENCY_DB_TIMEOUT', 5),
-
         // Behavior when DB query fails:
         // - false: Return null (cache miss) - fail closed
         // - true: Return cached value (fail open)
